@@ -1,0 +1,9 @@
+num_blocks: 16
+encoder_dim: 144
+attention_heads: 4
+conv_kernel_size: 32
+ffn_expansion: 4
+prediction_layers: 1
+prediction_dim: 320
+residual_dropout: 0.1
+# Derive output vocabulary size (including blank) from the fixed tokenizer.

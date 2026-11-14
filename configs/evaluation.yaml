@@ -1,0 +1,6 @@
+checkpoint: null
+decode: greedy
+max_symbols_per_frame: 8  # Project safeguard.
+development_splits: [dev-clean, dev-other]
+held_out_splits: [test-clean, test-other]
+output_dir: outputs

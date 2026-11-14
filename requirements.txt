@@ -1,0 +1,7 @@
+# Install matching torch and torchaudio builds separately (see README).
+PyYAML>=6,<7
+sentencepiece
+matplotlib
+pandas
+tensorboard
+jupyter

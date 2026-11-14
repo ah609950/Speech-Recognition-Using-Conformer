@@ -1,0 +1,13 @@
+root: data/raw
+pilot_train_splits: [train-clean-100]
+train_splits: [train-clean-100, train-clean-360, train-other-500]
+dev_splits: [dev-clean, dev-other]
+test_splits: [test-clean, test-other]
+sample_rate: 16000
+num_mel_bins: 80
+window_ms: 25
+hop_ms: 10
+tokenizer_path: data/processed/tokenizer.model
+# Resolve both IDs with the tokenizer owner before training.
+blank_id: null
+pad_id: null
