@@ -9,6 +9,12 @@ from conformer_asr.evaluation.decoder import GreedyRNNTDecoder
 from conformer_asr.evaluation.metrics import (corpus_error_rates, edit_counts,
                                               edit_distance, normalize)
 
+import json
+import tempfile
+from pathlib import Path
+
+from conformer_asr.evaluation.evaluator import evaluate
+
 class TestMetrics(unittest.TestCase):
     def test_edit_distance(self):
         self.assertEqual(edit_distance("THE CAT SAT".split(), "THE CAT SIT".split()), 1)
@@ -101,3 +107,39 @@ class TestGreedyDecoder(unittest.TestCase):
         frames = torch.tensor([[[0.0], [9.0]]]) # 2 frames stored
         result = decoder.decode_features(frames, torch.tensor([1]))[0] # but only 1 is real
         self.assertEqual(result["tokens"], [2])
+
+class FixedDecoder:
+    """Pretends to decode: returns the given texts, ignoring the audio"""
+    def __init__(self, texts):
+        self.texts = texts
+
+    def decode_features(self, features, lengths):
+        return [{"tokens": [], "text": t} for t in self.texts]
+
+class TestEvaluator(unittest.TestCase):
+    def setUp(self):
+        self.model = SimpleNamespace(eval=lambda: None) # fake model: only needs .eval()
+        self.batch = {"features": torch.zeros(2, 1, 1),
+                      "feature_lengths": torch.tensor([1, 1]),
+                      "utterance_ids": ["u1", "u2"],
+                      "transcripts": ["THE CAT", "THE CAT"]}
+
+    def test_saves_predictions_and_metrics(self):
+        decoder = FixedDecoder(["THE CAT", "THE"]) # 2nd utterance drops a word
+        with tempfile.TemporaryDirectory() as out:
+            result = evaluate(self.model, decoder, [self.batch], "cpu", out, "dev-clean", tag="best")
+
+            self.assertEqual(result["wer"], 0.25) # 1 deletion / 4 reference words
+            self.assertEqual(result["utterances"], 2)
+
+            lines = (Path(out) / "predictions" / "dev-clean_best.jsonl").read_text().splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(json.loads(lines[1])["prediction"], "THE")
+
+            saved = json.loads((Path(out) / "metrics" / "dev-clean_best.json").read_text())
+            self.assertEqual(saved["wer"], 0.25)
+
+    def test_missing_transcripts_gives_clear_error(self):
+        del self.batch["transcripts"]
+        with tempfile.TemporaryDirectory() as out, self.assertRaises(KeyError):
+            evaluate(self.model, FixedDecoder(["A", "B"]), [self.batch], "cpu", out, "x")
