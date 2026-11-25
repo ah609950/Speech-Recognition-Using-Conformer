@@ -83,3 +83,21 @@ class TestGreedyDecoder(unittest.TestCase):
         result = decoder.decode_features(frames, torch.tensor([2]))[0]
         self.assertEqual(result["tokens"], [2, 3])
         self.assertEqual(predictor.steps, [2, 3]) # LSTM fed only real tokens, never blanks
+
+    def test_two_tokens_on_one_frame(self):
+        decoder, predictor = make_decoder({(0, 0): 2, (0, 2): 3})
+        frames = torch.tensor([[[0.0]]]) # 1 utterance, just 1 frame
+        result = decoder.decode_features(frames, torch.tensor([1]))[0]
+        self.assertEqual(result["tokens"], [2, 3])
+
+    def test_max_symbols_per_frame_cap(self):
+        decoder, _ = make_decoder({(0, 0): 1, (0, 1): 1}, max_symbols=3)
+        frames = torch.tensor([[[0.0]]])
+        result = decoder.decode_features(frames, torch.tensor([1]))[0]
+        self.assertEqual(result["tokens"], [1, 1, 1])
+
+    def test_padding_frames_are_ignored(self):
+        decoder, _ = make_decoder({(0, 0): 2, (9, 2): 4})
+        frames = torch.tensor([[[0.0], [9.0]]]) # 2 frames stored
+        result = decoder.decode_features(frames, torch.tensor([1]))[0] # but only 1 is real
+        self.assertEqual(result["tokens"], [2])
