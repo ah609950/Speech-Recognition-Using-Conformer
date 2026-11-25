@@ -1,5 +1,11 @@
 import unittest
 
+from types import SimpleNamespace
+
+import torch
+
+from conformer_asr.evaluation.decoder import GreedyRNNTDecoder
+
 from conformer_asr.evaluation.metrics import (corpus_error_rates, edit_counts,
                                               edit_distance, normalize)
 
@@ -38,3 +44,42 @@ class TestMetrics(unittest.TestCase):
 
     def test_empty_reference(self):
         self.assertIsNone(corpus_error_rates([("", "A")])["wer"])
+
+class FakePredictor:
+    def __init__(self):
+        self.steps = [] # every token the LSTM was fed
+
+    def initial(self, batch_size, device):
+        return torch.zeros(1, 1), 0 # prediction 0 = nothing emitted yet
+
+    def step(self, token, state):
+        self.steps.append(int(token))
+        return token.float().view(1, 1), state + 1 # prediction = the last token
+
+class FakeJoint:
+    def __init__(self, table):
+        self.table = table # {(frame, last_token): token_to_emit}
+
+    def step(self, frame, prediction):
+        key = (int(frame.item()), int(prediction.item()))
+        logits = torch.full((1, 6), -10.0) # 6-token vocabulary, all low scores
+        logits[0, self.table.get(key, 0)] = 10.0 # chosen token (blank = 0 if not listed)
+        return logits
+
+def make_decoder(table, max_symbols=4):
+    predictor = FakePredictor()
+    model = SimpleNamespace(
+        prediction=predictor,
+        joint=FakeJoint(table),
+        encode=lambda features, lengths: (features, lengths), # fake encoder: pass-through
+    )
+    tokenizer = SimpleNamespace(blank_id=0, decode=lambda ids: " ".join(map(str, ids)))
+    return GreedyRNNTDecoder(model, tokenizer, max_symbols), predictor
+
+class TestGreedyDecoder(unittest.TestCase):
+    def test_blank_does_not_update_lstm(self):
+        decoder, predictor = make_decoder({(0, 0): 2, (1, 2): 3})
+        frames = torch.tensor([[[0.0], [1.0]]]) # shape [1 utterance, 2 frames, 1 number]
+        result = decoder.decode_features(frames, torch.tensor([2]))[0]
+        self.assertEqual(result["tokens"], [2, 3])
+        self.assertEqual(predictor.steps, [2, 3]) # LSTM fed only real tokens, never blanks
