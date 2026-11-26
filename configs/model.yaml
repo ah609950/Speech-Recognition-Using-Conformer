@@ -1,9 +1,19 @@
+# feature dimension
+input_dim: 80
+# number conformer blocks
 num_blocks: 16
+# encoder dimension
 encoder_dim: 144
+# number of attention heads
 attention_heads: 4
+# convolution kernel size (inside conformer block)
 conv_kernel_size: 32
+# feed forward expansion factor (144 -> 576 -> 144) inside conformer block
 ffn_expansion: 4
+# number of prediction layers (num of lstm layers)
 prediction_layers: 1
+# prediction dimension (lstm hidden size)
 prediction_dim: 320
+# dropout rate
 residual_dropout: 0.1
 # Derive output vocabulary size (including blank) from the fixed tokenizer.
