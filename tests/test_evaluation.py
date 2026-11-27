@@ -15,6 +15,11 @@ from pathlib import Path
 
 from conformer_asr.evaluation.evaluator import evaluate
 
+import matplotlib
+matplotlib.use("Agg") # draw to files only, never try to open a window during tests
+
+from conformer_asr.evaluation.visualization import (ema, load_scalars, plot_error_breakdown, plot_loss_curves, plot_scalar)
+
 class TestMetrics(unittest.TestCase):
     def test_edit_distance(self):
         self.assertEqual(edit_distance("THE CAT SAT".split(), "THE CAT SIT".split()), 1)
@@ -143,3 +148,36 @@ class TestEvaluator(unittest.TestCase):
         del self.batch["transcripts"]
         with tempfile.TemporaryDirectory() as out, self.assertRaises(KeyError):
             evaluate(self.model, FixedDecoder(["A", "B"]), [self.batch], "cpu", out, "x")
+
+class TestVisualization(unittest.TestCase):
+    def write_fake_log(self, folder, n_steps):
+        from torch.utils.tensorboard import SummaryWriter
+        writer = SummaryWriter(folder)
+        for step in range(n_steps):
+            writer.add_scalar("train/loss", 100 / (step + 1), step)
+            if step % 100 == 0:
+                writer.add_scalar("val/loss", 110 / (step + 1), step)
+        writer.close()
+
+    def test_loads_all_points_not_just_10000(self):
+        with tempfile.TemporaryDirectory() as log:
+            self.write_fake_log(log, 10_050)
+            steps, _ = load_scalars(log)["train/loss"]
+            self.assertEqual(len(steps), 10_050)
+
+    def test_ema_smooths(self):
+        self.assertEqual(ema([1, 1, 1], 0.9), [1, 1, 1]) # constant stays constant
+        smoothed = ema([0, 10], 0.5)
+        self.assertEqual(smoothed, [0, 5]) # halfway toward the jump
+
+    def test_figures_are_written(self):
+        with tempfile.TemporaryDirectory() as log, tempfile.TemporaryDirectory() as out:
+            self.write_fake_log(log, 500)
+            plot_loss_curves(log, Path(out) / "loss", selected_step=400)
+            plot_scalar(log, "train/loss", Path(out) / "train_loss", "loss")
+            metrics = [{"split": "dev-clean", "reference_words": 100,
+                        "word_error_counts": {"substitutions": 5, "deletions": 2, "insertions": 1}}]
+            plot_error_breakdown(metrics, Path(out) / "sdi")
+            for name in ("loss", "train_loss", "sdi"):
+                self.assertTrue((Path(out) / f"{name}.pdf").exists())
+                self.assertTrue((Path(out) / f"{name}.png").exists())
