@@ -3,4 +3,13 @@ decode: greedy
 max_symbols_per_frame: 8  # Project safeguard.
 development_splits: [dev-clean, dev-other]
 held_out_splits: [test-clean, test-other]
+
+batch_size: 1 # the decoder works per utterance, >1 only batches the encoder
+num_workers: 2 # dataloader background processes
 output_dir: outputs
+
+normalization: # what metrics.normalize() does
+  case: upper
+  keep: "A-Z 0-9 apostrophe"
+  whitespace: collapse
+  cer_includes_spaces: false
